@@ -10,13 +10,20 @@ The project is built with a modular architecture leveraging the LangChain ecosys
 - **Data Ingestion**: Uses `langchain-community` loaders (`PyPDFLoader`, `TextLoader`) and `RecursiveCharacterTextSplitter` to process raw files.
 - **Orchestration**: The `RAGEngine` uses LangChain Expression Language (LCEL) to build a streamlined retrieval and generation pipeline.
 
-## How the RAG Pipeline Works
+## How the RAG Pipeline Works (Deep Dive)
 
-1. **Ingestion**: Documents (like `.txt`, `.md`, or `.pdf`) are read from the `data/documents/` directory.
-2. **Chunking**: The text is split into smaller, overlapping chunks (e.g., 1000 characters) to preserve context without exceeding LLM token limits.
-3. **Embedding**: Each chunk is converted into a mathematical vector representation using the Gemini embedding model and stored in ChromaDB.
-4. **Retrieval**: When a user asks a question, the query is embedded, and ChromaDB performs a similarity search to find the most relevant chunks of text.
-5. **Generation**: The retrieved chunks are injected into a prompt template as "Context". The Gemini LLM generates a precise answer based *only* on that context, actively citing its sources in the response.
+1. **Ingestion & Parsing**: Documents (like `.txt`, `.md`, or `.pdf`) are loaded from `data/documents/`. The raw files are parsed to extract purely the text content, discarding formatting (except for structured markdown/txt) using LangChain's document loaders.
+2. **Chunking (Text Splitting)**: Since Large Language Models have a limited context window (and processing entire books at once is slow and expensive), the parsed text is split into smaller blocks called "chunks". 
+   - We use the `RecursiveCharacterTextSplitter`.
+   - It separates the text optimally by paragraphs (`\n\n`), then sentences (`\n`), and finally words.
+   - Each chunk has exactly 1000 characters, with an overlap of 200 characters between consecutive chunks. This overlap ensures that a sentence split down the middle doesn't lose its context.
+3. **Embeddings generation**: Once the text is chunked, each chunk is passed through the `gemini-embedding-001` model. This model acts as a translator: it reads the text and converts its semantic meaning into a dense vector (a long array of floating-point numbers, e.g., `[0.14, -0.82, 0.05, ...]`). In this multidimensional space, chunks that talk about similar topics are mathematically placed closer together.
+4. **Vector Storage**: These mathematical arrays (embeddings), along with their original text and metadata (like the source file name), are stored in **ChromaDB**, which acts as our highly optimized vector database.
+5. **Retrieval (Semantic Search)**: When a user asks a question (e.g., *"Where do axolotls live?"*):
+   - The question is converted into an embedding using the exact same Gemini model.
+   - ChromaDB calculates the geometric "distance" (cosine similarity) between the question's vector and all the stored document vectors.
+   - It retrieves the top `K` (usually 4) chunks with the shortest distance, meaning they are the most semantically relevant to the question.
+6. **Generation**: The retrieved chunks are injected into a strict prompt template as "Context". The Gemini LLM (`gemini-3.6-flash`) generates a precise answer based *only* on that context, actively citing its sources in the response.
 
 ## Setup and Usage
 
