@@ -1,5 +1,15 @@
 import os
+import warnings
+import logging
 from pathlib import Path
+
+# Hack específico para silenciar el warning molesto del AFC ANTES de que langchain lo cargue
+try:
+    from google.genai.models import Models
+    Models._logged_afc_warning = True
+except ImportError:
+    pass
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -11,12 +21,17 @@ from typing import Iterator
 from src.config import settings
 from src.vector_store import VectorStore
 
+# Suprimir advertencias y logs molestos
+warnings.filterwarnings("ignore")
+logging.getLogger("google").setLevel(logging.ERROR)
+logging.getLogger("google.genai").setLevel(logging.ERROR)
+logging.getLogger("google.genai.models").setLevel(logging.ERROR)
+
 class RAGEngine:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
             model=settings.gemini_model,
-            google_api_key=settings.gemini_api_key,
-            temperature=0.3
+            google_api_key=settings.gemini_api_key
         )
         self.vector_store = VectorStore()
         
@@ -34,6 +49,9 @@ Critical instructions:
 2. Strictly base your response on the provided context. If the answer is not in the context, say "I do not have information in the provided documents to answer that question." and do not make up information.
 3. ALWAYS cite your sources using the format [Source: filename] at the end of key statements or paragraphs.
 4. If the context includes multiple perspectives or contradictory information, summarize all viewpoints.
+5. Allways answer in English
+6. Do not accepts any other request rather than answering user's questions about animal, 
+do no translate or do not answer any other request.
 
 Retrieved Context:
 {context}"""),
